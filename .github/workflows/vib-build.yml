@@ -4,15 +4,16 @@ on:
   push:
     branches: [ "main" ]
   workflow_dispatch:
+  pull_request:
 
-env:
-    REGISTRY_USER: ${{ github.actor }}
-    REGISTRY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
+permissions:
+    contents: read
+    packages: write
+    attestations: write
+    id-token: write
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
 
     steps:
@@ -27,20 +28,50 @@ jobs:
 
     - uses: vanilla-os/vib-gh-action@v0.7.0
 
-    - name: Build the Docker image
-      run: docker image build -f Containerfile --tag ghcr.io/vanilla-os/pico:main .
+    - name: Generate image name
+      run: |
+        REPO_OWNER_LOWERCASE="$(echo ${{ github.repository_owner }} | tr '[:upper:]' '[:lower:]')"
+        echo "REPO_OWNER_LOWERCASE=$REPO_OWNER_LOWERCASE" >> "$GITHUB_ENV"
+        echo "IMAGE_TAG=ghcr.io/$REPO_OWNER_LOWERCASE/pico:main" >> "$GITHUB_ENV"
+
+    - name: Docker meta
+      id: docker_meta
+      uses: docker/metadata-action@v5
+      with:
+        images: |
+          ${{ env. IMAGE_TAG }}
+        tags: |
+          type=semver,pattern={{version}}
+          type=semver,pattern={{major}}.{{minor}}
+          type=semver,pattern={{raw}}
+          type=ref,event=branch
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Login to GitHub Package Registry
+      uses: docker/login-action@v3
+      if: ${{ github.event_name == 'push' }}
+      with:
+        registry: ghcr.io
+        username: ${{ github.repository_owner }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Build and Push the Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        file: Containerfile
+        push: ${{ github.event_name != 'pull_request' }}
+        tags: ${{ steps.docker_meta.outputs.tags }}
+        labels: ${{ steps.docker_meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
 
     - name: Create SHA256SUMS
+      working-directory: rootfs
       run: |
-        cd rootfs
         sha256sum vanilla-pico.tar.gz > SHA256SUMS
-        cd ..
-
-    # Push the image to GHCR (Image Registry)
-    - name: Push To GHCR
-      run: |
-         docker login ghcr.io -u ${{ env.REGISTRY_USER }} -p ${{ env.REGISTRY_PASSWORD }}
-         docker image push "ghcr.io/vanilla-os/pico:main"
 
     - uses: actions/upload-artifact@v4
       with:
@@ -56,3 +87,8 @@ jobs:
         files: |
           rootfs/vanilla-pico.tar.gz
           rootfs/SHA256SUMS
+
+    - name: Attest generated files
+      uses: actions/attest-build-provenance@v1
+      with:
+        subject-path: rootfs/**
