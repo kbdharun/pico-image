@@ -93,4 +93,4 @@ jobs:
       id: attest
       uses: actions/attest-build-provenance@v1
       with:
-        subject-path: rootfs/**
+        subject-path: rootfs/vanilla-pico.tar.gz, rootfs/SHA256SUMS
