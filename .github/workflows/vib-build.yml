@@ -2,14 +2,16 @@ name: Vib Build
 
 on:
   push:
+    branches:
+      - 'test/cache'
+    tags:
+      - '*'
   workflow_dispatch:
   pull_request:
 
 permissions:
-    contents: write # Allow softprops/action-gh-release to create release
+    contents: write # Allow actions to create release
     packages: write # Allow pushing images to GHCR
-    attestations: write # Allow actions/attest-build-provenance to create artifact attestations
-    id-token: write # Additional permissions for persisting attestions
 
 jobs:
   build:
@@ -88,9 +90,3 @@ jobs:
         files: |
           rootfs/vanilla-pico.tar.gz
           rootfs/SHA256SUMS
-
-    - name: Attest generated files
-      id: attest
-      uses: actions/attest-build-provenance@v1
-      with:
-        subject-path: rootfs/vanilla-pico.tar.gz, rootfs/SHA256SUMS
