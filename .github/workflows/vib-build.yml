@@ -6,10 +6,10 @@ on:
   pull_request:
 
 permissions:
-    contents: read
-    packages: write
-    attestations: write
-    id-token: write
+    contents: write # Allow softprops/action-gh-release to create release
+    packages: write # Allow pushing images to GHCR
+    attestations: write # Allow actions/attest-build-provenance to create artifact attestations
+    id-token: write # Additional permissions for persisting attestions
 
 jobs:
   build:
@@ -57,6 +57,7 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
 
     - name: Build and Push the Docker image
+      id: push
       uses: docker/build-push-action@v5
       with:
         context: .
@@ -88,6 +89,7 @@ jobs:
           rootfs/SHA256SUMS
 
     - name: Attest generated files
+      id: attest
       uses: actions/attest-build-provenance@v1
       with:
         subject-path: rootfs/**
